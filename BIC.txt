@@ -1,0 +1,452 @@
+#MEDIAN STRING
+def hamming_distance(a, b):
+    cnt = 0
+    for i in range(len(a)):
+        if a[i] != b[i]:
+            cnt += 1
+    return cnt
+
+
+def generate_kmers(k):
+    letters = ['A', 'C', 'G', 'T']
+    kmers = []
+
+    def build(curr):
+        if len(curr) == k:
+            kmers.append(curr)
+            return
+        for c in letters:
+            build(curr + c)
+
+    build("")
+    return kmers
+
+
+def distance_to_sequence(pattern, seq):
+    k = len(pattern)
+    best = 10**9
+    for i in range(len(seq) - k + 1):
+        window = seq[i:i+k]
+        d = hamming_distance(pattern, window)
+        if d < best:
+            best = d
+    return best
+
+
+def total_distance(pattern, dna_list):
+    total = 0
+    for seq in dna_list:
+        total += distance_to_sequence(pattern, seq)
+    return total
+
+
+def median_string(dna_list, k):
+    all_kmers = generate_kmers(k)
+    best_pattern = ""
+    best_score = 10**18
+
+    for pattern in all_kmers:
+        score = total_distance(pattern, dna_list)
+        if score < best_score:
+            best_score = score
+            best_pattern = pattern
+
+    return best_pattern, best_score
+
+
+
+
+k = int(input("Enter k: "))
+n = int(input("Enter number of DNA strings: "))
+
+dna_list = []
+print("Enter the DNA strings:")
+for _ in range(n):
+    dna_list.append(input().strip())
+
+result, score = median_string(dna_list, k)
+
+print("Median String =", result)
+print("Score =", score)
+
+
+
+GibbsSampler :
+
+
+import random
+
+# Count matrix (A C G T)
+def make_count(motifs, k):
+    count = [[1]*k for _ in range(4)]  # add pseudocounts = 1
+
+    for mot in motifs:
+        for i in range(k):
+            c = mot[i]
+            if c == 'A': count[0][i] += 1
+            elif c == 'C': count[1][i] += 1
+            elif c == 'G': count[2][i] += 1
+            elif c == 'T': count[3][i] += 1
+
+    return count
+
+
+# Convert count to probability profile
+def make_profile(count, t, k):
+    profile = [[0]*k for _ in range(4)]
+    for i in range(4):
+        for j in range(k):
+            profile[i][j] = count[i][j] / (t + 4)  # pseudocounts added
+    return profile
+
+
+# Probability of a k-mer using profile
+def kmer_probability(kmer, profile):
+    prob = 1
+    for i in range(len(kmer)):
+        c = kmer[i]
+        if c == 'A': prob *= profile[0][i]
+        elif c == 'C': prob *= profile[1][i]
+        elif c == 'G': prob *= profile[2][i]
+        elif c == 'T': prob *= profile[3][i]
+    return prob
+
+
+# Choose a k-mer from a sequence using weighted probability
+def profile_random_kmer(seq, k, profile):
+    kmers = []
+    probs = []
+
+    for i in range(len(seq) - k + 1):
+        kmer = seq[i:i+k]
+        kmers.append(kmer)
+        probs.append(kmer_probability(kmer, profile))
+
+    # normalize probabilities
+    total = sum(probs)
+    for i in range(len(probs)):
+        probs[i] = probs[i] / total
+
+    # choose k-mer according to probability
+    r = random.random()
+    cum = 0
+    for i in range(len(kmers)):
+        cum += probs[i]
+        if r <= cum:
+            return kmers[i]
+
+    return kmers[-1] 
+
+
+def score(motifs, k):
+    total = 0
+    t = len(motifs)
+    for i in range(k):
+        count = {'A':0,'C':0,'G':0,'T':0}
+        for m in motifs:
+            count[m[i]] += 1
+        max_freq = max(count.values())
+        total += (t - max_freq)
+    return total
+
+
+
+
+def gibbs_sampler(dna, k, iterations):
+    t = len(dna)
+
+    # Step 1: Randomly choose initial motifs
+    motifs = []
+    for i in range(t):
+        start = random.randint(0, len(dna[i]) - k)
+        motifs.append(dna[i][start:start+k])
+
+    best_motifs = list(motifs)
+    best_score = score(best_motifs, k)
+
+    for _ in range(iterations):
+        # Random index to remove
+        idx = random.randint(0, t-1)
+
+        # Remove one motif
+        removed = motifs.pop(idx)
+
+        # Build profile from remaining motifs
+        count = make_count(motifs, k)
+        profile = make_profile(count, t-1, k)
+
+        # Sample new k-mer for removed sequence
+        new_kmer = profile_random_kmer(dna[idx], k, profile)
+
+        # Insert back
+        motifs.insert(idx, new_kmer)
+
+        # Check score
+        current_score = score(motifs, k)
+        if current_score < best_score:
+            best_score = current_score
+            best_motifs = list(motifs)
+
+    return best_motifs, best_score
+
+
+
+
+k = int(input("Enter motif length k: "))
+t = int(input("Enter number of DNA sequences: "))
+
+dna = []
+print("Enter DNA sequences:")
+for _ in range(t):
+    dna.append(input().strip())
+
+motifs, sc = gibbs_sampler(dna, k, 2000)
+
+print("\nBest Motifs:")
+for m in motifs:
+    print(m)
+
+print("Score =", sc)
+
+
+
+#Randomaize Motif search
+
+
+import random
+
+# Hamming distance
+def hamming(a, b):
+    cnt = 0
+    for i in range(len(a)):
+        if a[i] != b[i]:
+            cnt += 1
+    return cnt
+
+# Score motifs (lower is better)
+def score(motifs, k):
+    total = 0
+    t = len(motifs)
+    for i in range(k):
+        freq = {"A":0, "C":0, "G":0, "T":0}
+        for m in motifs:
+            freq[m[i]] += 1
+        max_freq = max(freq.values())
+        total += (t - max_freq)
+    return total
+
+# Build count matrix with pseudocount = 1 (recommended)
+def make_count(motifs, k):
+    count = [[1]*k for _ in range(4)]
+    for mot in motifs:
+        for i in range(k):
+            c = mot[i]
+            if c == 'A': count[0][i] += 1
+            elif c == 'C': count[1][i] += 1
+            elif c == 'G': count[2][i] += 1
+            elif c == 'T': count[3][i] += 1
+    return count
+
+# Convert count to profile
+def make_profile(count, t, k):
+    profile = [[0]*k for _ in range(4)]
+    for i in range(4):
+        for j in range(k):
+            profile[i][j] = count[i][j] / (t + 4)
+    return profile
+
+# Probability of a k-mer given profile
+def kmer_prob(kmer, profile):
+    p = 1
+    for i in range(len(kmer)):
+        c = kmer[i]
+        if c == 'A': p *= profile[0][i]
+        elif c == 'C': p *= profile[1][i]
+        elif c == 'G': p *= profile[2][i]
+        elif c == 'T': p *= profile[3][i]
+    return p
+
+# Find most probable k-mer in a sequence using profile
+def best_kmer(seq, k, profile):
+    best = seq[0:k]
+    best_p = -1
+    for i in range(len(seq)-k+1):
+        kmer = seq[i:i+k]
+        p = kmer_prob(kmer, profile)
+        if p > best_p:
+            best_p = p
+            best = kmer
+    return best
+
+
+def randomized_motif_search(dna, k):
+    t = len(dna)
+
+    # Randomly choose initial motifs
+    motifs = []
+    for i in range(t):
+        start = random.randint(0, len(dna[i]) - k)
+        motifs.append(dna[i][start:start+k])
+
+    best_motifs = list(motifs)
+    best_score = score(best_motifs, k)
+
+    while True:
+        count = make_count(motifs, k)
+        profile = make_profile(count, t, k)
+
+        new_motifs = []
+        for seq in dna:
+            new_motifs.append(best_kmer(seq, k, profile))
+
+        new_score = score(new_motifs, k)
+
+        if new_score < best_score:
+            best_score = new_score
+            best_motifs = list(new_motifs)
+            motifs = new_motifs
+        else:
+            return best_motifs, best_score
+
+
+
+k = int(input("Enter motif length k: "))
+t = int(input("Enter number of DNA sequences: "))
+
+dna = []
+print("Enter DNA sequences:")
+for _ in range(t):
+    dna.append(input().strip())
+
+motifs, sc = randomized_motif_search(dna, k)
+
+print("\nBest Motifs Found:")
+for m in motifs:
+    print(m)
+
+print("Score =", sc)
+
+
+
+#Greedy Motif search
+
+
+import math
+
+# Score motifs (lower is better)
+def score(motifs, k):
+    total = 0
+    t = len(motifs)
+
+    for i in range(k):
+        freq = {"A":0, "C":0, "G":0, "T":0}
+        for m in motifs:
+            freq[m[i]] += 1
+
+        max_freq = max(freq.values())
+        total += (t - max_freq)
+
+    return total
+
+
+# Build count matrix with pseudocounts = 1
+def make_count(motifs, k):
+    count = [[1]*k for _ in range(4)]  # A,C,G,T rows
+
+    for mot in motifs:
+        for i in range(k):
+            c = mot[i]
+            if c == 'A': count[0][i] += 1
+            elif c == 'C': count[1][i] += 1
+            elif c == 'G': count[2][i] += 1
+            elif c == 'T': count[3][i] += 1
+
+    return count
+
+
+# Convert count → profile matrix
+def make_profile(count, t, k):
+    profile = [[0]*k for _ in range(4)]
+    for i in range(4):
+        for j in range(k):
+            profile[i][j] = count[i][j] / (t + 4)   # +4 for pseudocounts
+    return profile
+
+
+# Probability of k-mer according to profile
+def kmer_prob(kmer, profile):
+    p = 1
+    for i in range(len(kmer)):
+        c = kmer[i]
+        if c == 'A': p *= profile[0][i]
+        elif c == 'C': p *= profile[1][i]
+        elif c == 'G': p *= profile[2][i]
+        elif c == 'T': p *= profile[3][i]
+    return p
+
+
+# Most probable k-mer in sequence according to profile
+def most_probable_kmer(seq, k, profile):
+    best = seq[0:k]
+    best_p = -1
+
+    for i in range(len(seq) - k + 1):
+        kmer = seq[i:i+k]
+        p = kmer_prob(kmer, profile)
+        if p > best_p:
+            best_p = p
+            best = kmer
+
+    return best
+
+
+
+def greedy_motif_search(dna, k, t):
+    best_motifs = []
+
+    # Initialize with the first k-mer of each string
+    for seq in dna:
+        best_motifs.append(seq[0:k])
+
+    best_score = score(best_motifs, k)
+
+    first_seq = dna[0]
+
+    # Try every k-mer in the first sequence
+    for start in range(len(first_seq) - k + 1):
+        motifs = []
+        motifs.append(first_seq[start:start+k])
+
+        # Build motifs for all other sequences greedily
+        for i in range(1, t):
+            count = make_count(motifs, k)
+            profile = make_profile(count, len(motifs), k)
+            next_kmer = most_probable_kmer(dna[i], k, profile)
+            motifs.append(next_kmer)
+
+        # Check if better
+        sc = score(motifs, k)
+        if sc < best_score:
+            best_score = sc
+            best_motifs = motifs
+
+    return best_motifs, best_score
+
+
+k = int(input("Enter motif length k: "))
+t = int(input("Enter number of DNA sequences: "))
+
+dna = []
+print("Enter DNA sequences:")
+for _ in range(t):
+    dna.append(input().strip())
+
+motifs, sc = greedy_motif_search(dna, k, t)
+
+print("\nBest Motifs Found:")
+for m in motifs:
+    print(m)
+
+print("Score =", sc)
+
+
